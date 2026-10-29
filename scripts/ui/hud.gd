@@ -1,16 +1,12 @@
 class_name Hud
 extends CanvasLayer
 
-signal viaje_isla_pedido
-
 var jugador: Player
 var paneles: Dictionary = {}
 
-var _nivel: Label
-var _xp: ProgressBar
-var _cash: Label
+var _dano: Label
+var _ritmo: Label
 var _scrap: Label
-var _gasta: Label
 var _meta_texto: Label
 var _meta_barra: ProgressBar
 var _punto_mejoras: Panel
@@ -32,6 +28,7 @@ var _tutorial_titulo: Label
 var _tutorial_texto: Label
 var _tutorial_paso: Label
 var _victoria: Control
+var _victoria_titulo: Label
 var _victoria_texto: Label
 var _fps: Label
 
@@ -45,17 +42,15 @@ func _ready() -> void:
 	_construir_tutorial()
 	_construir_superposiciones()
 	_construir_paneles()
-	GameState.cash_cambio.connect(func(_v: int) -> void: _refrescar_recursos())
-	GameState.scrap_cambio.connect(func(_v: int, _c: int) -> void: _refrescar_recursos())
-	GameState.xp_cambio.connect(func(_x: int, _r: int, _n: int) -> void: _refrescar_perfil())
-	GameState.nivel_subio.connect(func(_n: int) -> void: _refrescar_perfil())
+	GameState.scrap_cambio.connect(func(_v: int) -> void: _refrescar_recursos())
 	GameState.mejora_comprada.connect(func(_i: String, _n: int) -> void: _refrescar_recursos())
-	GameState.herramienta_cambio.connect(_refrescar_casillas)
 	GameState.toast.connect(mostrar_toast)
 	GameState.prompt_cambio.connect(_al_cambiar_prompt)
 	GameState.boss_estado.connect(_al_estado_jefe)
 	GameState.tutorial_cambio.connect(func(_p: int) -> void: _refrescar_tutorial())
-	GameState.jefe_vencido.connect(_mostrar_victoria)
+	GameState.coloso_vencido.connect(_mostrar_coloso_vencido)
+	GameState.maestria_terminada.connect(_mostrar_maestria)
+	GameState.juego_completado.connect(_mostrar_final)
 	_refrescar_todo()
 
 
@@ -64,7 +59,6 @@ func _process(_delta: float) -> void:
 	_meta_texto.text = _texto_meta(meta)
 	_meta_barra.value = clampf(float(meta["actual"]) / maxf(float(meta["meta"]), 1.0), 0.0, 1.0)
 	_punto_mejoras.visible = GameState.hay_mejora_asequible()
-	_gasta.visible = GameState.bolsa_llena()
 	_fps.text = "%d FPS" % Engine.get_frames_per_second()
 	if jugador != null:
 		_vida.visible = jugador.salud < GameConfig.VIDA_JUGADOR and not jugador.muerto
@@ -82,16 +76,12 @@ func _construir_perfil() -> void:
 	caja.position = Vector2(16, 14)
 	caja.add_theme_stylebox_override("panel", UIKit.estilo(Color(0.17, 0.18, 0.21, 0.88), GameColors.NARANJA, 12, 3, 10))
 	caja.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fila := HBoxContainer.new()
-	fila.add_theme_constant_override("separation", 10)
-	caja.add_child(fila)
-	_nivel = UIKit.etiqueta("LV 1", 24, GameColors.AMARILLO)
-	fila.add_child(_nivel)
 	var col := VBoxContainer.new()
-	col.add_child(UIKit.etiqueta("WRECKER", 17))
-	_xp = UIKit.barra(GameColors.NARANJA, Vector2(170, 12))
-	col.add_child(_xp)
-	fila.add_child(col)
+	_dano = UIKit.etiqueta("", 20, GameColors.AMARILLO)
+	col.add_child(_dano)
+	_ritmo = UIKit.etiqueta("", 15, Color("#B8BDC8"))
+	col.add_child(_ritmo)
+	caja.add_child(col)
 	add_child(caja)
 
 
@@ -104,8 +94,6 @@ func _construir_menu() -> void:
 	_punto_mejoras = UIKit.punto_rojo()
 	_punto_mejoras.position = Vector2(-6, -6)
 	_boton_mejoras.add_child(_punto_mejoras)
-	_boton_menu(col, "TOOLS [T]", GameColors.NARANJA.darkened(0.1), "tools")
-	_boton_menu(col, "ISLANDS", GameColors.ROJO.darkened(0.1), "islands")
 	_boton_menu(col, "SETTINGS [TAB]", GameColors.CIAN.darkened(0.45), "settings")
 
 
@@ -131,10 +119,7 @@ func _construir_centro() -> void:
 	recursos.alignment = BoxContainer.ALIGNMENT_CENTER
 	recursos.add_theme_constant_override("separation", 12)
 	recursos.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_cash = _pildora(recursos, "$ 0", GameColors.AMARILLO)
-	_scrap = _pildora(recursos, "0 / 500", GameColors.NARANJA)
-	_gasta = UIKit.etiqueta("SPEND!", 18, GameColors.ROJO)
-	recursos.add_child(_gasta)
+	_scrap = _pildora(recursos, "SCRAP 0", GameColors.AMARILLO)
 	raiz.add_child(recursos)
 	var meta := PanelContainer.new()
 	meta.add_theme_stylebox_override("panel", UIKit.estilo(Color(0.17, 0.18, 0.21, 0.85), GameColors.AMARILLO.darkened(0.3), 10, 2, 6))
@@ -151,7 +136,7 @@ func _construir_centro() -> void:
 	_contenedor_jefe.add_theme_stylebox_override("panel", UIKit.estilo(Color(0.2, 0.08, 0.08, 0.9), GameColors.ROJO, 10, 3, 8))
 	_contenedor_jefe.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var jefecol := VBoxContainer.new()
-	_jefe_nombre = UIKit.etiqueta("SCRAP COLOSSUS", 20, GameColors.ROJO, HORIZONTAL_ALIGNMENT_CENTER)
+	_jefe_nombre = UIKit.etiqueta("COLOSSUS", 20, GameColors.ROJO, HORIZONTAL_ALIGNMENT_CENTER)
 	jefecol.add_child(_jefe_nombre)
 	_jefe_barra = UIKit.barra(GameColors.ROJO, Vector2(0, 18))
 	jefecol.add_child(_jefe_barra)
@@ -180,20 +165,17 @@ func _construir_inferior() -> void:
 	barra.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	barra.anchor_left = 0.5
 	barra.anchor_right = 0.5
-	barra.offset_left = -170
-	barra.offset_right = 170
+	barra.offset_left = -80
+	barra.offset_right = 80
 	barra.offset_top = -86
 	barra.offset_bottom = -16
 	barra.alignment = BoxContainer.ALIGNMENT_CENTER
 	barra.add_theme_constant_override("separation", 8)
 	add_child(barra)
-	for i in 3:
-		var b := UIKit.boton("", Color("#2B2F36"), Vector2(104, 62), 14)
-		b.pressed.connect(func() -> void:
-			if i < GameConfig.ORDEN_HERRAMIENTAS.size():
-				GameState.equipar(GameConfig.ORDEN_HERRAMIENTAS[i]))
-		barra.add_child(b)
-		_casillas.append(b)
+	var b := UIKit.boton("", Color("#2B2F36"), Vector2(150, 62), 14)
+	b.disabled = false
+	barra.add_child(b)
+	_casillas.append(b)
 	_aviso = PanelContainer.new()
 	_aviso.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_aviso.anchor_left = 0.5
@@ -297,7 +279,8 @@ func _construir_superposiciones() -> void:
 	tarjeta.add_theme_stylebox_override("panel", UIKit.estilo(GameColors.GRIS_OSCURO, GameColors.AMARILLO, 18, 5, 26))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
-	col.add_child(UIKit.etiqueta("SCRAP COLOSSUS DEFEATED", 36, GameColors.AMARILLO, HORIZONTAL_ALIGNMENT_CENTER))
+	_victoria_titulo = UIKit.etiqueta("", 36, GameColors.AMARILLO, HORIZONTAL_ALIGNMENT_CENTER)
+	col.add_child(_victoria_titulo)
 	_victoria_texto = UIKit.etiqueta("", 22, GameColors.BLANCO, HORIZONTAL_ALIGNMENT_CENTER)
 	col.add_child(_victoria_texto)
 	var seguir := UIKit.boton("CONTINUE", GameColors.NARANJA, Vector2(240, 52), 22)
@@ -312,12 +295,11 @@ func _construir_superposiciones() -> void:
 
 func _construir_paneles() -> void:
 	paneles["upgrades"] = UpgradesPanel.new()
-	paneles["tools"] = ToolsPanel.new()
 	paneles["settings"] = SettingsPanel.new()
-	paneles["unlock_downtown"] = UnlockPanel.new()
-	var islas := IslandsPanel.new()
-	islas.viajar_pedido.connect(func() -> void: viaje_isla_pedido.emit())
-	paneles["islands"] = islas
+	for id in ["downtown", "industrial"]:
+		var panel := UnlockPanel.new()
+		panel.zona = id
+		paneles["unlock_" + id] = panel
 	for panel in paneles.values():
 		add_child(panel)
 
@@ -336,8 +318,6 @@ func abrir_panel(nombre: String) -> void:
 func _unhandled_input(evento: InputEvent) -> void:
 	if evento.is_action_pressed("open_upgrades"):
 		_alternar("upgrades")
-	elif evento.is_action_pressed("open_tools"):
-		_alternar("tools")
 	elif evento.is_action_pressed("open_settings"):
 		_alternar("settings")
 
@@ -374,36 +354,19 @@ func mostrar_toast(texto: String, tipo: String = "neutral") -> void:
 
 func _refrescar_todo() -> void:
 	_refrescar_recursos()
-	_refrescar_perfil()
 	_refrescar_casillas()
 	_refrescar_tutorial()
 
 
 func _refrescar_recursos() -> void:
-	_cash.text = "$ %s" % Formulas.abreviar(GameState.cash)
-	_scrap.text = "%s / %s" % [Formulas.abreviar(GameState.scrap), Formulas.abreviar(GameState.capacidad_bolsa())]
-
-
-func _refrescar_perfil() -> void:
-	_nivel.text = "LV %d" % GameState.nivel
-	_xp.value = float(GameState.xp) / float(GameState.xp_requerido())
+	_scrap.text = "SCRAP %s" % Formulas.abreviar(GameState.scrap)
+	_dano.text = "DAMAGE %s" % Formulas.abreviar(GameState.dano_base_golpe())
+	_ritmo.text = "HIT EVERY %.2fs" % GameState.cooldown_ataque()
 
 
 func _refrescar_casillas() -> void:
-	for i in _casillas.size():
-		var b := _casillas[i]
-		if i >= GameConfig.ORDEN_HERRAMIENTAS.size():
-			b.text = "%d\n--" % (i + 1)
-			b.disabled = true
-			continue
-		var id: String = GameConfig.ORDEN_HERRAMIENTAS[i]
-		var def: Dictionary = GameConfig.HERRAMIENTAS[id]
-		var tiene := GameState.posee_herramienta(id)
-		b.disabled = not tiene
-		b.text = "%d\n%s" % [i + 1, String(def["nombre"]).split(" ")[0] if tiene else "LOCKED"]
-		var activo := GameState.herramienta_equipada == id
-		b.add_theme_stylebox_override("normal", UIKit.estilo(Color("#2B2F36"), GameColors.AMARILLO if activo else Color("#22252B"), 10, 4 if activo else 2))
-		b.add_theme_stylebox_override("disabled", UIKit.estilo(Color("#23262C"), Color("#1C1E23"), 10, 2))
+	_casillas[0].text = "1\n%s" % GameConfig.MARTILLO["nombre"]
+	_casillas[0].add_theme_stylebox_override("normal", UIKit.estilo(Color("#2B2F36"), GameColors.AMARILLO, 10, 4))
 
 
 func _al_cambiar_prompt(texto: String, progreso: float) -> void:
@@ -414,9 +377,10 @@ func _al_cambiar_prompt(texto: String, progreso: float) -> void:
 
 
 func _al_estado_jefe(datos: Dictionary) -> void:
-	_contenedor_jefe.visible = datos["activo"] and jugador != null and jugador.global_position.z > 1000.0
+	_contenedor_jefe.visible = datos["activo"]
 	if not _contenedor_jefe.visible:
 		return
+	_jefe_nombre.text = datos["nombre"]
 	_jefe_barra.value = datos["proporcion"]
 	_jefe_objetivo.text = datos["objetivo"]
 
@@ -441,14 +405,31 @@ func ocultar_muerte() -> void:
 	_muerte.visible = false
 
 
-func _mostrar_victoria(resultado: Dictionary) -> void:
+func _mostrar_coloso_vencido(r: Dictionary) -> void:
 	await get_tree().create_timer(1.2).timeout
-	var lineas := "+$%s   +%s SCRAP   +%d XP" % [Formulas.abreviar(resultado["cash"]), Formulas.abreviar(resultado["scrap"]), int(resultado["xp"])]
-	if int(resultado["scrap_perdido"]) > 0:
-		lineas += "\n(bag full: %s SCRAP lost)" % Formulas.abreviar(resultado["scrap_perdido"])
-	if resultado["plano"] != "":
-		lineas += "\nNEW BLUEPRINT: %s" % String(resultado["plano"]).replace("_", " ")
-	lineas += "\n\nFIGHT TIME %s   BEST %s\nTOTAL PLAY TIME %s" % [Formulas.formato_tiempo(resultado["tiempo"]), Formulas.formato_tiempo(resultado["mejor_tiempo"]), Formulas.formato_tiempo(resultado["tiempo_total"])]
-	_victoria_texto.text = lineas
+	_victoria_titulo.text = "%s DEFEATED" % r["nombre"]
+	var lineas := "FIGHT TIME %s" % Formulas.formato_tiempo(r["tiempo"])
+	if int(r["scrap"]) > 0:
+		lineas = "+%s SCRAP\n" % Formulas.abreviar(r["scrap"]) + lineas
+	lineas += "\nIts eyes turn green."
+	_mostrar_tarjeta(lineas)
+
+
+func _mostrar_maestria(r: Dictionary) -> void:
+	await get_tree().create_timer(1.2).timeout
+	_victoria_titulo.text = "MASTERY · %s" % r["nombre"]
+	var lineas := "FIGHT TIME %s\n%s\nSTARS %d / %d" % [Formulas.formato_tiempo(r["tiempo"]), "NO DAMAGE TAKEN" if r["sin_dano"] else "DAMAGE TAKEN", int(r["estrellas"]), int(GameConfig.COLOSO["estrellas_maximas"])]
+	_mostrar_tarjeta(lineas)
+
+
+func _mostrar_final(r: Dictionary) -> void:
+	await get_tree().create_timer(2.5).timeout
+	_victoria_titulo.text = "ALL COLOSSI DEFEATED"
+	_mostrar_tarjeta("TOTAL TIME %s\nOBJECTS WRECKED %d\n\nReturn to any console for MASTERY mode:\nbeat the colossus fast or without damage." % [Formulas.formato_tiempo(r["tiempo_total"]), int(r["objetos_rotos"])])
+
+
+func _mostrar_tarjeta(texto: String) -> void:
+	_victoria_texto.text = texto
+	if not _victoria.visible:
+		GameState.abrir_panel()
 	_victoria.visible = true
-	GameState.abrir_panel()

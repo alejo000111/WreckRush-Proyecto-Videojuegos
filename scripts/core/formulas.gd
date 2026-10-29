@@ -2,53 +2,56 @@
 class_name Formulas
 extends RefCounted
 
-const MAX_VELOCIDAD := 40.0
-const PRECIO_NIVELES_EXPONENCIALES := 10
-const CRECIMIENTO_PRECIO_INICIAL := 1.5
-const CRECIMIENTO_PRECIO_TARDIO := 1.15
+const CRECIMIENTO_PRECIO := 1.5
 const PRECIO_MAXIMO := 1.0e15
-
-
-static func velocidad_caminar(nivel: int) -> float:
-	return minf(16.0 + 0.6 * nivel, MAX_VELOCIDAD)
-
-
-static func radio_iman(nivel: int) -> float:
-	return 12.0 + 1.5 * nivel
 
 
 static func multiplicador_dano(nivel_mejora: int) -> float:
 	return 1.0 + 0.25 * nivel_mejora
 
 
-static func dano_golpe(dano_herramienta: float, nivel_herramienta: int, multiplicador: float) -> float:
-	return dano_herramienta * (1.0 + 0.12 * (nivel_herramienta - 1)) * multiplicador
-
-
-static func probabilidad_critico(nivel: int) -> float:
-	return minf(0.05 + 0.01 * nivel, 0.75)
+static func dano_golpe(dano_herramienta: float, nivel_mejora: int) -> float:
+	return dano_herramienta * multiplicador_dano(nivel_mejora)
 
 
 static func cooldown_ataque(cooldown_base: float, nivel_velocidad: int) -> float:
 	return cooldown_base / (1.0 + 0.06 * nivel_velocidad)
 
 
-static func capacidad_bolsa(nivel: int) -> int:
-	return int(round(500.0 * pow(1.3, nivel)))
+static func precio_mejora(precio_base: float, nivel_nuevo: int, desfase: int = 0) -> int:
+	return int(round(minf(precio_base * pow(CRECIMIENTO_PRECIO, nivel_nuevo + desfase), PRECIO_MAXIMO)))
 
 
-static func xp_para_nivel(nivel: int) -> int:
-	return int(round(25.0 * pow(nivel, 1.35)))
+static func golpes_para_romper(vida: float, dano: float) -> int:
+	return int(ceil(vida / dano))
 
 
-static func precio_mejora(precio_base: float, nivel_actual: int, siempre_exponencial: bool = false) -> int:
-	var tope := PRECIO_NIVELES_EXPONENCIALES
-	var precio := 0.0
-	if siempre_exponencial or nivel_actual <= tope:
-		precio = precio_base * pow(CRECIMIENTO_PRECIO_INICIAL, nivel_actual)
-	else:
-		precio = precio_base * pow(CRECIMIENTO_PRECIO_INICIAL, tope) * pow(CRECIMIENTO_PRECIO_TARDIO, nivel_actual - tope)
-	return int(round(minf(precio, PRECIO_MAXIMO)))
+static func segundos_para_romper(golpes: int, cooldown: float) -> float:
+	return (golpes - 1) * cooldown
+
+
+static func vida_placa(numero_coloso: int) -> float:
+	return 800.0 + 200.0 * (numero_coloso - 1)
+
+
+static func vida_nucleo(numero_coloso: int) -> float:
+	return 700.0 + 100.0 * (numero_coloso - 1)
+
+
+static func intervalo_golpe_suelo(numero_coloso: int) -> float:
+	return 7.0 - numero_coloso
+
+
+static func studs_a_metros(studs: float) -> float:
+	return studs * GameConfig.METROS_POR_STUD
+
+
+static func velocidad_salto(altura: float, tiempo_aire: float) -> float:
+	return 4.0 * altura / tiempo_aire
+
+
+static func gravedad_salto(altura: float, tiempo_aire: float) -> float:
+	return 8.0 * altura / (tiempo_aire * tiempo_aire)
 
 
 static func elevacion_sol(hora: float) -> float:

@@ -135,7 +135,6 @@ func _romper() -> void:
 		_barra.visible = false
 	var pago := GameState.registrar_objeto_roto(def, zona)
 	Fx.romper(self, String(def["tamano"]), pago)
-	_soltar_orbes()
 	if _tween_contorno != null and _tween_contorno.is_valid():
 		_tween_contorno.kill()
 	_tween_contorno = create_tween()
@@ -145,24 +144,6 @@ func _romper() -> void:
 	_tween_contorno.chain().tween_callback(func() -> void: _raiz_visual.visible = false)
 	roto.emit(self)
 	get_tree().create_timer(float(def["respawn"])).timeout.connect(_reaparecer)
-
-
-func _soltar_orbes() -> void:
-	var total := GameConfig.scrap_de(def)
-	if total <= 0:
-		return
-	var cantidad := clampi(total, 1, GameConfig.MAX_ORBES_POR_OBJETO)
-	var base := total / cantidad
-	var resto := total - base * cantidad
-	var mundo := get_tree().current_scene
-	if mundo == null:
-		return
-	for i in cantidad:
-		var orbe := ScrapOrb.new()
-		orbe.valor = base + (1 if i < resto else 0)
-		mundo.add_child(orbe)
-		orbe.global_position = global_position + Vector3(0, caja.y * 0.5, 0)
-		orbe.lanzar()
 
 
 func _reaparecer() -> void:

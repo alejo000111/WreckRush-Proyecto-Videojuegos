@@ -1,7 +1,6 @@
 extends Node3D
 
 @onready var ciudad: CityWorld = $Ciudad
-@onready var isla: BossIsland = $RustAtoll
 @onready var ambiente: AmbienceController = $Ambiente
 @onready var jugador: Player = $Jugador
 @onready var camara: CameraController = $Camara
@@ -9,6 +8,7 @@ extends Node3D
 var hud: Hud
 
 var _muerte_restante: float = 0.0
+var _punto_reaparicion: Vector3 = CityWorld.PUNTO_PLAZA
 
 
 func _ready() -> void:
@@ -18,7 +18,8 @@ func _ready() -> void:
 	camara.saltar_a(jugador.global_position)
 	jugador.camara = camara
 	ambiente.jugador = jugador
-	isla.colosal.jugador = jugador
+	for coloso in ciudad.colosos:
+		coloso.jugador = jugador
 	var martillo := HammerController.new()
 	martillo.name = "Martillo"
 	martillo.jugador = jugador
@@ -37,12 +38,9 @@ func _ready() -> void:
 	add_child(hud)
 	ciudad.panel_pedido.connect(hud.abrir_panel)
 	ciudad.viaje_pedido.connect(viajar_a)
-	hud.viaje_isla_pedido.connect(viajar_a_isla)
-	isla.volver_pedido.connect(func() -> void: viajar_a("plaza"))
 	jugador.murio.connect(_al_morir)
-	for senal in [GameState.mejora_comprada, GameState.zona_desbloqueada]:
-		senal.connect(func(_a: Variant = null, _b: Variant = null) -> void: GameState.guardar())
-	GameState.herramienta_cambio.connect(GameState.guardar)
+	GameState.mejora_comprada.connect(func(_i: String, _n: int) -> void: GameState.guardar())
+	GameState.zona_desbloqueada.connect(func(_i: String) -> void: GameState.guardar())
 	if OS.is_debug_build():
 		var dev := DevTools.new()
 		dev.main = self
@@ -55,32 +53,39 @@ func _process(delta: float) -> void:
 		hud.mostrar_muerte(_muerte_restante)
 		if _muerte_restante <= 0.0:
 			hud.ocultar_muerte()
-			jugador.revivir(isla.punto_aparicion)
+			jugador.revivir(_punto_reaparicion)
 
 
 func viajar_a(destino: String) -> void:
-	match destino:
-		"scrap_yard":
-			jugador.teletransportar(CityWorld.PUNTO_SCRAP_YARD)
-		"downtown":
-			if GameState.zona_abierta("downtown"):
-				jugador.teletransportar(CityWorld.PUNTO_DOWNTOWN)
-			else:
-				hud.abrir_panel("unlock_downtown")
-		_:
-			if isla.colosal.en_pelea():
-				isla.colosal.reiniciar()
-			jugador.teletransportar(CityWorld.PUNTO_PLAZA + Vector3(0, 0, -20))
+	if destino == "plaza":
+		_reiniciar_colosos()
+		jugador.teletransportar(CityWorld.PUNTO_PLAZA + Vector3(0, 0, -20))
+	elif GameState.zona_abierta(destino):
+		jugador.teletransportar(CityWorld.PUNTOS_ENTRADA[destino])
+	else:
+		hud.abrir_panel("unlock_" + destino)
+		return
 	Sfx.reproducir("comprar", -8.0)
 
 
-func viajar_a_isla() -> void:
-	jugador.teletransportar(isla.punto_aparicion)
-	GameState.toast.emit("RUST ATOLL", "good")
-	Sfx.reproducir("comprar", -8.0)
+func _reiniciar_colosos() -> void:
+	for coloso in ciudad.colosos:
+		if coloso.en_pelea():
+			coloso.reiniciar()
+
+
+func _coloso_activo() -> Coloso:
+	for coloso in ciudad.colosos:
+		if coloso.en_pelea():
+			return coloso
+	return null
 
 
 func _al_morir() -> void:
-	_muerte_restante = GameConfig.REAPARICION_ISLA_JEFE
-	isla.colosal.reiniciar()
+	_muerte_restante = GameConfig.REAPARICION_COLOSO
+	_punto_reaparicion = jugador.ultimo_punto_seguro
+	var coloso := _coloso_activo()
+	if coloso != null:
+		_punto_reaparicion = coloso.punto_reaparicion()
+		coloso.reiniciar()
 	Sfx.reproducir("error")

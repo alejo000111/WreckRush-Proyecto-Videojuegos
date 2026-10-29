@@ -7,7 +7,7 @@ var _confirmar: Button
 
 
 func _init() -> void:
-	super._init("UNLOCK ZONE", GameColors.AMARILLO, 560.0)
+	super._init("UNLOCK ISLAND", GameColors.AMARILLO, 560.0)
 
 
 func construir() -> void:
@@ -29,11 +29,11 @@ func construir() -> void:
 	cancelar.pressed.connect(cerrar)
 	fila.add_child(cancelar)
 	contenido.add_child(fila)
-	GameState.cash_cambio.connect(func(_v: int) -> void: if abierto: refrescar())
+	GameState.scrap_cambio.connect(func(_v: int) -> void: if abierto: refrescar())
 
 
 func refrescar() -> void:
 	var def: Dictionary = GameConfig.ZONAS[zona]
 	var costo: int = def["costo"]
-	_texto.text = "%s\nobjects pay %s with more HP\n\nCOST  $%s\nYOU HAVE  $%s" % [def["nombre"], def["mult"], Formulas.abreviar(costo), Formulas.abreviar(GameState.cash)]
-	_confirmar.disabled = GameState.cash < costo
+	_texto.text = "ISLAND %d · %s\n%d objects and a colossus\n\nCOST  %s SCRAP\nYOU HAVE  %s SCRAP\n\nOnce paid, it stays open forever." % [int(def["isla"]), def["nombre"], GameConfig.total_objetos(zona), Formulas.abreviar(costo), Formulas.abreviar(GameState.scrap)]
+	_confirmar.disabled = GameState.scrap < costo

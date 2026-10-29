@@ -3,11 +3,13 @@ extends CharacterBody3D
 
 signal murio
 signal salud_cambio(salud: float, maxima: float)
+signal recibio_dano
 
 const ACELERACION := 80.0
 const FRICCION := 64.0
-const VELOCIDAD_SALTO := 50.0
-const GRAVEDAD := 196.2
+const VELOCIDAD := 16.0
+const VELOCIDAD_SALTO := 15.87
+const GRAVEDAD := 35.27
 const ALTURA_CAPSULA := 5.0
 const RADIO_CAPSULA := 1.0
 const INTERVALO_PUNTO_SEGURO := 0.5
@@ -40,7 +42,6 @@ func _ready() -> void:
 	colision.position = Vector3(0, ALTURA_CAPSULA * 0.5, 0)
 	add_child(colision)
 	_construir_modelo()
-	GameState.herramienta_cambio.connect(_pintar_martillo)
 	_pintar_martillo()
 
 
@@ -62,7 +63,7 @@ func _construir_modelo() -> void:
 
 
 func _pintar_martillo() -> void:
-	var color: Color = GameState.herramienta()["color"]
+	var color: Color = GameConfig.MARTILLO["color"]
 	(_cabeza_martillo.material_override as StandardMaterial3D).albedo_color = color
 
 
@@ -83,7 +84,7 @@ func _physics_process(delta: float) -> void:
 	var direccion := Basis(Vector3.UP, yaw) * Vector3(entrada.x, 0.0, entrada.y)
 	var horizontal := Vector2(velocity.x, velocity.z)
 	if entrada.length() > 0.01:
-		var meta := Vector2(direccion.x, direccion.z).normalized() * GameState.velocidad_caminar()
+		var meta := Vector2(direccion.x, direccion.z).normalized() * VELOCIDAD
 		horizontal = horizontal.move_toward(meta, ACELERACION * delta)
 		_modelo.rotation.y = lerp_angle(_modelo.rotation.y, atan2(-direccion.x, -direccion.z), clampf(14.0 * delta, 0.0, 1.0))
 	else:
@@ -134,6 +135,7 @@ func tomar_dano(cantidad: float) -> void:
 	if muerto:
 		return
 	salud = maxf(salud - cantidad, 0.0)
+	recibio_dano.emit()
 	salud_cambio.emit(salud, GameConfig.VIDA_JUGADOR)
 	var parpadeo := create_tween()
 	_material_cuerpo.albedo_color = GameColors.ROJO

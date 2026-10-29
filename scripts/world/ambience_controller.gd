@@ -9,6 +9,7 @@ var entorno: Environment
 var sol: DirectionalLight3D
 var jugador: Node3D
 var distrito_actual: String = ""
+var en_arena: bool = false
 var hora: float = GameConfig.HORA_CIUDAD
 
 var _cielo: ProceduralSkyMaterial
@@ -19,13 +20,13 @@ var _temporizador: float = 0.0
 
 
 static func distrito_en(punto: Vector3) -> String:
-	if absf(punto.x) > 1000.0 or absf(punto.z) > 1000.0:
-		return "isla_jefe"
 	var celda := Vector2i(roundi(punto.x / CityWorld.SEPARACION), roundi(punto.z / CityWorld.SEPARACION))
 	if celda == Vector2i(0, -1):
 		return "scrap_yard"
 	if celda == Vector2i(1, -1):
 		return "downtown"
+	if celda == Vector2i(1, 0):
+		return "industrial"
 	return "plaza"
 
 
@@ -71,13 +72,18 @@ func _process(delta: float) -> void:
 	var distrito := distrito_en(jugador.global_position)
 	if distrito != distrito_actual:
 		cambiar_distrito(distrito)
+	var cerca := false
+	for coloso in get_tree().get_nodes_in_group("colosos"):
+		if coloso.global_position.distance_to(jugador.global_position) < GameConfig.RADIO_ARENA:
+			cerca = true
+	if cerca != en_arena:
+		en_arena = cerca
+		modo_isla_jefe(cerca)
 
 
 func cambiar_distrito(zona: String) -> void:
 	distrito_actual = zona
-	var isla := zona == "isla_jefe"
-	modo_isla_jefe(isla)
-	var tinte: Color = Color("#FFD9B8") if isla else GameConfig.ZONAS[zona]["tinte"]
+	var tinte: Color = GameConfig.ZONAS[zona]["tinte"]
 	if _tween_tinte != null and _tween_tinte.is_valid():
 		_tween_tinte.kill()
 	_tween_tinte = create_tween()
@@ -85,7 +91,7 @@ func cambiar_distrito(zona: String) -> void:
 
 
 func modo_isla_jefe(activo: bool) -> void:
-	var meta := GameConfig.HORA_ISLA_JEFE if activo else GameConfig.HORA_CIUDAD
+	var meta := GameConfig.HORA_ARENA if activo else GameConfig.HORA_CIUDAD
 	if is_equal_approx(meta, hora) and (_tween_hora == null or not _tween_hora.is_running()):
 		return
 	if _tween_hora != null and _tween_hora.is_valid():
@@ -96,7 +102,7 @@ func modo_isla_jefe(activo: bool) -> void:
 
 func _aplicar_hora(valor: float) -> void:
 	hora = valor
-	var f := clampf((GameConfig.HORA_CIUDAD - hora) / (GameConfig.HORA_CIUDAD - GameConfig.HORA_ISLA_JEFE), 0.0, 1.0)
+	var f := clampf((GameConfig.HORA_CIUDAD - hora) / (GameConfig.HORA_CIUDAD - GameConfig.HORA_ARENA), 0.0, 1.0)
 	var elevacion := Formulas.elevacion_sol(hora)
 	sol.rotation_degrees = Vector3(-elevacion, 215.0, 0.0)
 	sol.light_color = Color("#FFB784").lerp(Color("#FFD6B0"), f)

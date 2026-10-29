@@ -12,11 +12,8 @@ static func registrar() -> void:
 	_mouse("attack", MOUSE_BUTTON_LEFT)
 	_teclas("interact", [KEY_E])
 	_teclas("tool_1", [KEY_1])
-	_teclas("tool_2", [KEY_2])
-	_teclas("tool_3", [KEY_3])
 	_teclas("close_panel", [KEY_BACKSPACE, KEY_ESCAPE])
 	_teclas("open_upgrades", [KEY_U])
-	_teclas("open_tools", [KEY_T])
 	_teclas("open_settings", [KEY_TAB])
 	_mouse("camera_orbit", MOUSE_BUTTON_RIGHT)
 

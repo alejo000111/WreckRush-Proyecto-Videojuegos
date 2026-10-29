@@ -1,12 +1,8 @@
 extends Node
 
-signal cash_cambio(valor: int)
-signal scrap_cambio(valor: int, capacidad: int)
-signal xp_cambio(xp: int, requerido: int, nivel: int)
-signal nivel_subio(nivel: int)
+signal scrap_cambio(valor: int)
 signal mejora_comprada(id: String, nivel: int)
 signal zona_desbloqueada(id: String)
-signal herramienta_cambio()
 signal objeto_roto(def: Dictionary, zona: String)
 signal toast(texto: String, tipo: String)
 signal ajustes_cambio()
@@ -14,26 +10,23 @@ signal prompt_cambio(texto: String, progreso: float)
 signal boss_estado(datos: Dictionary)
 signal tutorial_cambio(paso: int)
 signal panel_cambio()
-signal jefe_vencido(resultado: Dictionary)
+signal coloso_vencido(resultado: Dictionary)
+signal maestria_terminada(resultado: Dictionary)
+signal juego_completado(resultado: Dictionary)
 
-const VERSION_GUARDADO := 1
+const VERSION_GUARDADO := 2
 
-var cash: int = 0
 var scrap: int = 0
-var xp: int = 0
-var nivel: int = 1
 var mejoras: Dictionary = {}
-var herramientas: Array = ["scrap_hammer"]
-var herramienta_equipada: String = "scrap_hammer"
 var zonas: Array = ["scrap_yard"]
+var rotos_por_zona: Dictionary = {}
+var colosos: Dictionary = {}
 var objetos_rotos: int = 0
 var golpes: int = 0
 var dano_total: float = 0.0
-var cash_total: int = 0
+var scrap_total: int = 0
 var tiempo_juego: float = 0.0
-var jefe_victorias: int = 0
-var mejor_tiempo_jefe: float = 0.0
-var planos: Array = []
+var completado: bool = false
 var tutorial_paso: int = 0
 var tutorial_completo: bool = false
 var ajustes: Dictionary = {"camera_shake": true, "damage_numbers": true, "sfx": true}
@@ -43,6 +36,7 @@ var boton_wreck: bool = false
 var ruta_guardado: String = "user://wreckrush_save.json"
 var guardado_habilitado: bool = true
 var _tiempo_autoguardado: float = 0.0
+var _scrap_anterior: int = 0
 
 
 func _ready() -> void:
@@ -65,121 +59,66 @@ func _notification(what: int) -> void:
 
 
 func reiniciar() -> void:
-	cash = 0
 	scrap = 0
-	xp = 0
-	nivel = 1
 	mejoras = {}
 	for id in GameConfig.ORDEN_MEJORAS:
 		mejoras[id] = 0
-	herramientas = ["scrap_hammer"]
-	herramienta_equipada = "scrap_hammer"
 	zonas = ["scrap_yard"]
+	rotos_por_zona = {}
+	for zona in GameConfig.ORDEN_ZONAS:
+		rotos_por_zona[zona] = 0
+	colosos = {}
+	for c in GameConfig.COLOSOS:
+		colosos[int(c["numero"])] = {"vencido": false, "est_tiempo": false, "est_sin_dano": false, "mejor_tiempo": 0.0}
 	objetos_rotos = 0
 	golpes = 0
 	dano_total = 0.0
-	cash_total = 0
+	scrap_total = 0
 	tiempo_juego = 0.0
-	jefe_victorias = 0
-	mejor_tiempo_jefe = 0.0
-	planos = []
+	completado = false
 	tutorial_paso = 0
 	tutorial_completo = false
 	paneles_abiertos = 0
 	boton_wreck = false
+	_scrap_anterior = 0
 
 
 func nivel_mejora(id: String) -> int:
 	return int(mejoras.get(id, 0))
 
 
-func multiplicador_dano() -> float:
-	return Formulas.multiplicador_dano(nivel_mejora("damage"))
-
-
-func herramienta() -> Dictionary:
-	return GameConfig.HERRAMIENTAS[herramienta_equipada]
-
-
 func dano_base_golpe() -> float:
-	return Formulas.dano_golpe(float(herramienta()["dano"]), 1, multiplicador_dano())
-
-
-func probabilidad_critico() -> float:
-	return Formulas.probabilidad_critico(nivel_mejora("critical_chance"))
+	return Formulas.dano_golpe(float(GameConfig.MARTILLO["dano"]), nivel_mejora("damage"))
 
 
 func cooldown_ataque() -> float:
-	return Formulas.cooldown_ataque(float(herramienta()["cooldown"]), nivel_mejora("attack_speed"))
+	return Formulas.cooldown_ataque(float(GameConfig.MARTILLO["cooldown"]), nivel_mejora("attack_speed"))
 
 
 func alcance_ataque() -> float:
-	return float(herramienta()["alcance"])
+	return float(GameConfig.MARTILLO["alcance"])
 
 
-func radio_iman() -> float:
-	return Formulas.radio_iman(nivel_mejora("magnet_range"))
+func puede_retar_coloso() -> bool:
+	return dano_base_golpe() >= GameConfig.DANO_REQUERIDO_COLOSO
 
 
-func velocidad_caminar() -> float:
-	return Formulas.velocidad_caminar(nivel_mejora("move_speed"))
-
-
-func capacidad_bolsa() -> int:
-	return Formulas.capacidad_bolsa(nivel_mejora("scrap_capacity"))
-
-
-func bolsa_llena() -> bool:
-	return scrap >= capacidad_bolsa()
-
-
-func xp_requerido() -> int:
-	return Formulas.xp_para_nivel(nivel)
-
-
-func agregar_cash(cantidad: int) -> void:
+func agregar_scrap(cantidad: int) -> void:
 	if cantidad <= 0:
 		return
-	cash += cantidad
-	cash_total += cantidad
-	cash_cambio.emit(cash)
-
-
-func gastar_cash(cantidad: int) -> bool:
-	if cantidad < 0 or cash < cantidad:
-		return false
-	cash -= cantidad
-	cash_cambio.emit(cash)
-	return true
-
-
-func agregar_scrap(cantidad: int) -> int:
-	var libre := maxi(capacidad_bolsa() - scrap, 0)
-	var aceptado := mini(cantidad, libre)
-	if aceptado > 0:
-		scrap += aceptado
-		scrap_cambio.emit(scrap, capacidad_bolsa())
-	return aceptado
+	scrap += cantidad
+	scrap_total += cantidad
+	scrap_cambio.emit(scrap)
+	_revisar_hitos()
 
 
 func gastar_scrap(cantidad: int) -> bool:
 	if cantidad < 0 or scrap < cantidad:
 		return false
 	scrap -= cantidad
-	scrap_cambio.emit(scrap, capacidad_bolsa())
+	_scrap_anterior = scrap
+	scrap_cambio.emit(scrap)
 	return true
-
-
-func agregar_xp(cantidad: int) -> void:
-	if cantidad <= 0:
-		return
-	xp += cantidad
-	while xp >= xp_requerido():
-		xp -= xp_requerido()
-		nivel += 1
-		nivel_subio.emit(nivel)
-		toast.emit("LEVEL UP! LV %d" % nivel, "good")
-	xp_cambio.emit(xp, xp_requerido(), nivel)
 
 
 func registrar_golpe(dano: float) -> void:
@@ -188,17 +127,17 @@ func registrar_golpe(dano: float) -> void:
 
 
 func registrar_objeto_roto(def: Dictionary, zona: String) -> int:
-	var pago := GameConfig.cash_de(def)
-	agregar_cash(pago)
-	agregar_xp(GameConfig.xp_de(def, zona))
+	var pago := int(def["scrap"])
+	agregar_scrap(pago)
 	objetos_rotos += 1
+	rotos_por_zona[zona] = int(rotos_por_zona.get(zona, 0)) + 1
 	objeto_roto.emit(def, zona)
 	return pago
 
 
 func precio_mejora(id: String) -> int:
 	var def: Dictionary = GameConfig.MEJORAS[id]
-	return Formulas.precio_mejora(float(def["base"]), nivel_mejora(id), bool(def["exponencial"]))
+	return Formulas.precio_mejora(float(def["base"]), nivel_mejora(id) + 1, int(def["desfase"]))
 
 
 func estado_mejora(id: String) -> Dictionary:
@@ -206,11 +145,8 @@ func estado_mejora(id: String) -> Dictionary:
 	if nivel_mejora(id) >= int(def["max"]):
 		return {"ok": false, "razon": "MAXED"}
 	var precio := precio_mejora(id)
-	var tiene := cash if def["moneda"] == "cash" else scrap
-	if tiene < precio:
-		return {"ok": false, "razon": "NOT ENOUGH %s" % String(def["moneda"]).to_upper(), "precio": precio}
-	if id != "scrap_capacity" and def["moneda"] == "scrap" and precio > capacidad_bolsa():
-		return {"ok": false, "razon": "BAG TOO SMALL", "precio": precio}
+	if scrap < precio:
+		return {"ok": false, "razon": "NOT ENOUGH SCRAP", "precio": precio}
 	return {"ok": true, "razon": "", "precio": precio}
 
 
@@ -219,25 +155,10 @@ func comprar_mejora(id: String) -> Dictionary:
 	if not estado["ok"]:
 		toast.emit(String(estado["razon"]), "bad")
 		return estado
-	var def: Dictionary = GameConfig.MEJORAS[id]
-	var precio: int = estado["precio"]
-	if def["moneda"] == "cash":
-		gastar_cash(precio)
-	else:
-		gastar_scrap(precio)
+	gastar_scrap(int(estado["precio"]))
 	mejoras[id] = nivel_mejora(id) + 1
 	mejora_comprada.emit(id, mejoras[id])
-	if id == "scrap_capacity":
-		scrap_cambio.emit(scrap, capacidad_bolsa())
 	return estado
-
-
-func comprar_mejora_maximo(id: String) -> int:
-	var compradas := 0
-	while estado_mejora(id)["ok"] and compradas < 500:
-		comprar_mejora(id)
-		compradas += 1
-	return compradas
 
 
 func hay_mejora_asequible() -> bool:
@@ -254,96 +175,136 @@ func zona_abierta(id: String) -> bool:
 func desbloquear_zona(id: String) -> bool:
 	if zona_abierta(id):
 		return true
-	var costo: int = GameConfig.ZONAS[id]["costo"]
-	if not gastar_cash(costo):
-		toast.emit("NOT ENOUGH CASH", "bad")
+	if not gastar_scrap(int(GameConfig.ZONAS[id]["costo"])):
+		toast.emit("NOT ENOUGH SCRAP", "bad")
 		return false
 	zonas.append(id)
 	zona_desbloqueada.emit(id)
-	toast.emit("%s UNLOCKED!" % GameConfig.ZONAS[id]["nombre"], "good")
+	toast.emit("ISLAND %d · %s UNLOCKED!" % [int(GameConfig.ZONAS[id]["isla"]), GameConfig.ZONAS[id]["nombre"]], "good")
 	return true
 
 
-func posee_herramienta(id: String) -> bool:
-	return herramientas.has(id)
+func rotos_en(zona: String) -> int:
+	return int(rotos_por_zona.get(zona, 0))
 
 
-func comprar_herramienta(id: String) -> bool:
-	if posee_herramienta(id):
-		return true
-	var precio: int = GameConfig.HERRAMIENTAS[id]["precio"]
-	if not gastar_cash(precio):
-		toast.emit("NOT ENOUGH CASH", "bad")
-		return false
-	herramientas.append(id)
-	herramienta_cambio.emit()
-	toast.emit("%s BOUGHT" % GameConfig.HERRAMIENTAS[id]["nombre"], "good")
+func coloso_vencido_p(numero: int) -> bool:
+	return bool(colosos[numero]["vencido"])
+
+
+func todos_vencidos() -> bool:
+	for numero in colosos:
+		if not colosos[numero]["vencido"]:
+			return false
 	return true
 
 
-func equipar(id: String) -> bool:
-	if not posee_herramienta(id):
-		return false
-	herramienta_equipada = id
-	herramienta_cambio.emit()
-	return true
+func estrellas(numero: int) -> int:
+	return int(bool(colosos[numero]["est_tiempo"])) + int(bool(colosos[numero]["est_sin_dano"]))
 
 
-func requisitos_isla() -> Dictionary:
-	var isla: Dictionary = GameConfig.ISLA_JEFE
-	var herramienta_req: String = isla["herramienta_requerida"]
-	var lista: Array = [
-		{"texto": "LEVEL %d" % int(isla["nivel_requerido"]), "ok": nivel >= int(isla["nivel_requerido"])},
-		{"texto": GameConfig.HERRAMIENTAS[herramienta_req]["nombre"], "ok": posee_herramienta(herramienta_req)},
-		{"texto": GameConfig.ZONAS[isla["zona_requerida"]]["nombre"], "ok": zona_abierta(isla["zona_requerida"])},
-	]
-	var todos := true
-	for requisito in lista:
-		todos = todos and requisito["ok"]
-	return {"ok": todos, "lista": lista}
-
-
-func registrar_victoria_jefe(tiempo: float) -> Dictionary:
-	var premio: Dictionary = GameConfig.JEFE["recompensa"]
-	var primera := jefe_victorias == 0
-	jefe_victorias += 1
-	if mejor_tiempo_jefe <= 0.0 or tiempo < mejor_tiempo_jefe:
-		mejor_tiempo_jefe = tiempo
-	agregar_cash(int(premio["cash"]))
-	var scrap_recibido := agregar_scrap(int(premio["scrap"]))
-	agregar_xp(int(premio["xp"]))
-	var plano := ""
-	if primera:
-		plano = GameConfig.JEFE["plano_primera_victoria"]
-		if not planos.has(plano):
-			planos.append(plano)
-	var resultado := {
-		"cash": int(premio["cash"]),
-		"scrap": scrap_recibido,
-		"scrap_perdido": int(premio["scrap"]) - scrap_recibido,
-		"xp": int(premio["xp"]),
-		"plano": plano,
-		"tiempo": tiempo,
-		"mejor_tiempo": mejor_tiempo_jefe,
-		"victorias": jefe_victorias,
-		"tiempo_total": tiempo_juego,
-	}
-	jefe_vencido.emit(resultado)
+func registrar_victoria_coloso(numero: int, tiempo: float, sin_dano: bool, maestria: bool) -> Dictionary:
+	var datos: Dictionary = GameConfig.COLOSOS[numero - 1]
+	var entrada: Dictionary = colosos[numero]
+	var resultado := {"numero": numero, "nombre": datos["nombre"], "tiempo": tiempo, "sin_dano": sin_dano, "maestria": maestria, "scrap": 0, "estrellas_nuevas": 0, "estrellas": estrellas(numero)}
+	if maestria:
+		var antes := estrellas(numero)
+		if tiempo < float(datos["maestria_segundos"]):
+			entrada["est_tiempo"] = true
+		if sin_dano:
+			entrada["est_sin_dano"] = true
+		resultado["estrellas"] = estrellas(numero)
+		resultado["estrellas_nuevas"] = estrellas(numero) - antes
+		maestria_terminada.emit(resultado)
+		guardar()
+		return resultado
+	entrada["vencido"] = true
+	if float(entrada["mejor_tiempo"]) <= 0.0 or tiempo < float(entrada["mejor_tiempo"]):
+		entrada["mejor_tiempo"] = tiempo
+	var premio := int(datos["recompensa"])
+	if premio > 0:
+		agregar_scrap(premio)
+	resultado["scrap"] = premio
+	coloso_vencido.emit(resultado)
+	if todos_vencidos() and not completado:
+		completado = true
+		juego_completado.emit({"tiempo_total": tiempo_juego, "objetos_rotos": objetos_rotos, "golpes": golpes})
 	guardar()
 	return resultado
 
 
+func plan_de_metas() -> Array:
+	var plan: Array = []
+	for n in range(1, 9):
+		plan.append(["damage", n])
+	plan.append(["zona", "downtown"])
+	plan.append(["damage", 9])
+	plan.append(["attack_speed", 1])
+	plan.append(["damage", 10])
+	plan.append(["attack_speed", 2])
+	plan.append(["attack_speed", 3])
+	plan.append(["zona", "industrial"])
+	plan.append(["damage", 11])
+	plan.append(["damage", 12])
+	plan.append(["coloso", 1])
+	plan.append(["coloso", 2])
+	plan.append(["attack_speed", 4])
+	plan.append(["attack_speed", 5])
+	plan.append(["coloso", 3])
+	return plan
+
+
+func _meta_cumplida(meta: Array) -> bool:
+	match meta[0]:
+		"damage", "attack_speed":
+			return nivel_mejora(meta[0]) >= int(meta[1])
+		"zona":
+			return zona_abierta(meta[1])
+		"coloso":
+			return coloso_vencido_p(int(meta[1]))
+	return true
+
+
 func siguiente_meta() -> Dictionary:
-	if not zona_abierta("downtown"):
-		return {"texto": "DOWNTOWN", "actual": cash, "meta": int(GameConfig.ZONAS["downtown"]["costo"]), "listo": false}
-	if not posee_herramienta("power_hammer"):
-		return {"texto": "POWER HAMMER", "actual": cash, "meta": int(GameConfig.HERRAMIENTAS["power_hammer"]["precio"]), "listo": false}
-	var nivel_req: int = GameConfig.ISLA_JEFE["nivel_requerido"]
-	if nivel < nivel_req:
-		return {"texto": "LEVEL %d" % nivel_req, "actual": nivel, "meta": nivel_req, "listo": false}
-	if jefe_victorias == 0:
-		return {"texto": "RUST ATOLL BOSS", "actual": 1, "meta": 1, "listo": true}
-	return {"texto": "ALL DONE", "actual": 1, "meta": 1, "listo": true}
+	for meta in plan_de_metas():
+		if _meta_cumplida(meta):
+			continue
+		match meta[0]:
+			"damage", "attack_speed":
+				var def: Dictionary = GameConfig.MEJORAS[meta[0]]
+				var precio := Formulas.precio_mejora(float(def["base"]), int(meta[1]), int(def["desfase"]))
+				return {"texto": "%s %d" % [def["nombre"], int(meta[1])], "actual": scrap, "meta": precio, "listo": false}
+			"zona":
+				return {"texto": "ISLAND %d" % int(GameConfig.ZONAS[meta[1]]["isla"]), "actual": scrap, "meta": int(GameConfig.ZONAS[meta[1]]["costo"]), "listo": false}
+			"coloso":
+				var datos: Dictionary = GameConfig.COLOSOS[int(meta[1]) - 1]
+				var rotos := rotos_en(datos["zona"])
+				var umbral: int = datos["giro_cabeza"]
+				if not zona_abierta(datos["zona"]):
+					return {"texto": "ISLAND %d" % int(GameConfig.ZONAS[datos["zona"]]["isla"]), "actual": scrap, "meta": int(GameConfig.ZONAS[datos["zona"]]["costo"]), "listo": false}
+				if rotos < umbral:
+					return {"texto": "WAKE COLOSSUS %d" % int(meta[1]), "actual": rotos, "meta": umbral, "listo": false}
+				if not puede_retar_coloso():
+					return {"texto": "DAMAGE 40", "actual": int(dano_base_golpe()), "meta": 40, "listo": false}
+				return {"texto": "COLOSSUS %d" % int(meta[1]), "actual": 1, "meta": 1, "listo": true}
+	return {"texto": "MASTERY STARS", "actual": 1, "meta": 1, "listo": true}
+
+
+func _revisar_hitos() -> void:
+	var antes := _scrap_anterior
+	_scrap_anterior = scrap
+	var meta := siguiente_meta()
+	if meta["listo"] or int(meta["meta"]) <= 0:
+		return
+	var precio: int = meta["meta"]
+	var texto: String = meta["texto"]
+	var cortes: Array = [0.5]
+	if texto == "ISLAND 3":
+		cortes.append(0.75)
+	for corte in cortes:
+		var limite := int(precio * float(corte))
+		if antes < limite and scrap >= limite:
+			toast.emit("NEXT %s: %s / %s" % [texto, Formulas.abreviar(scrap), Formulas.abreviar(precio)], "good")
 
 
 func avanzar_tutorial() -> void:
@@ -381,24 +342,22 @@ func cambiar_ajuste(clave: String, valor: bool) -> void:
 
 
 func a_diccionario() -> Dictionary:
+	var datos_colosos := {}
+	for numero in colosos:
+		datos_colosos[str(numero)] = colosos[numero]
 	return {
 		"version": VERSION_GUARDADO,
-		"cash": cash,
 		"scrap": scrap,
-		"xp": xp,
-		"nivel": nivel,
 		"mejoras": mejoras,
-		"herramientas": herramientas,
-		"herramienta_equipada": herramienta_equipada,
 		"zonas": zonas,
+		"rotos_por_zona": rotos_por_zona,
+		"colosos": datos_colosos,
 		"objetos_rotos": objetos_rotos,
 		"golpes": golpes,
 		"dano_total": dano_total,
-		"cash_total": cash_total,
+		"scrap_total": scrap_total,
 		"tiempo_juego": tiempo_juego,
-		"jefe_victorias": jefe_victorias,
-		"mejor_tiempo_jefe": mejor_tiempo_jefe,
-		"planos": planos,
+		"completado": completado,
 		"tutorial_paso": tutorial_paso,
 		"tutorial_completo": tutorial_completo,
 		"ajustes": ajustes,
@@ -407,43 +366,38 @@ func a_diccionario() -> Dictionary:
 
 func desde_diccionario(datos: Dictionary) -> void:
 	reiniciar()
-	cash = int(datos.get("cash", 0))
-	scrap = int(datos.get("scrap", 0))
-	xp = int(datos.get("xp", 0))
-	nivel = maxi(int(datos.get("nivel", 1)), 1)
+	scrap = maxi(int(datos.get("scrap", 0)), 0)
 	var guardadas: Dictionary = datos.get("mejoras", {})
 	for id in GameConfig.ORDEN_MEJORAS:
 		mejoras[id] = clampi(int(guardadas.get(id, 0)), 0, int(GameConfig.MEJORAS[id]["max"]))
-	herramientas = []
-	for id in datos.get("herramientas", ["scrap_hammer"]):
-		if GameConfig.HERRAMIENTAS.has(id):
-			herramientas.append(String(id))
-	if not herramientas.has("scrap_hammer"):
-		herramientas.append("scrap_hammer")
-	herramienta_equipada = String(datos.get("herramienta_equipada", "scrap_hammer"))
-	if not herramientas.has(herramienta_equipada):
-		herramienta_equipada = "scrap_hammer"
 	zonas = []
 	for id in datos.get("zonas", ["scrap_yard"]):
-		if GameConfig.ZONAS.has(id):
+		if GameConfig.ZONAS.has(id) and id != "plaza":
 			zonas.append(String(id))
 	if not zonas.has("scrap_yard"):
 		zonas.append("scrap_yard")
+	var rotos: Dictionary = datos.get("rotos_por_zona", {})
+	for zona in GameConfig.ORDEN_ZONAS:
+		rotos_por_zona[zona] = maxi(int(rotos.get(zona, 0)), 0)
+	var guardados: Dictionary = datos.get("colosos", {})
+	for numero in colosos:
+		var e: Dictionary = guardados.get(str(numero), {})
+		colosos[numero]["vencido"] = bool(e.get("vencido", false))
+		colosos[numero]["est_tiempo"] = bool(e.get("est_tiempo", false))
+		colosos[numero]["est_sin_dano"] = bool(e.get("est_sin_dano", false))
+		colosos[numero]["mejor_tiempo"] = float(e.get("mejor_tiempo", 0.0))
 	objetos_rotos = int(datos.get("objetos_rotos", 0))
 	golpes = int(datos.get("golpes", 0))
 	dano_total = float(datos.get("dano_total", 0.0))
-	cash_total = int(datos.get("cash_total", 0))
+	scrap_total = int(datos.get("scrap_total", 0))
 	tiempo_juego = float(datos.get("tiempo_juego", 0.0))
-	jefe_victorias = int(datos.get("jefe_victorias", 0))
-	mejor_tiempo_jefe = float(datos.get("mejor_tiempo_jefe", 0.0))
-	planos = []
-	for plano in datos.get("planos", []):
-		planos.append(String(plano))
+	completado = todos_vencidos()
 	tutorial_paso = int(datos.get("tutorial_paso", 0))
 	tutorial_completo = bool(datos.get("tutorial_completo", false))
 	var ajustes_guardados: Dictionary = datos.get("ajustes", {})
 	for clave in ajustes.keys():
 		ajustes[clave] = bool(ajustes_guardados.get(clave, ajustes[clave]))
+	_scrap_anterior = scrap
 
 
 func guardar() -> bool:

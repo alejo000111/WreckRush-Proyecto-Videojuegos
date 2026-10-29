@@ -38,12 +38,11 @@ Esta guía sirve para estudiar cómo se tradujo cada idea del juego de Roblox.
 5. Si la vida llega a 0: `GameState.registrar_objeto_roto` paga Cash/XP, `Fx.romper` lanza la explosión, se sueltan los orbes y arranca el respawn.
 6. `CameraController` vibra 0,15 s si el golpe fue fuerte.
 
-## Decisiones propias (marcadas como propuesta, como pedía el taller)
+## Decisiones propias (marcadas como propuesta)
 
-- **Precio de mejoras**: ×1,5 por nivel los primeros 10 y ×1,15 después (la guía no da el factor).
-- **Nivel de herramienta**: el bono de +12 % empieza en el nivel 2, así el Scrap Hammer inicial hace 10 (como en la traza del Rol 3).
-- **Jefe**: núcleo 4 000 PV, placas 800 PV, tope de daño por golpe 15 % de la vida de cada pieza, daño de ataque 30 de 100 PV. La guía no fija estos números.
-- **Ataque en anillo**: radio 11–34 alrededor del jefe, para castigar a quien pelea pegado a las placas.
-- **Muerte**: reaparece en la isla a los 45 s y el jefe se reinicia.
-- **Llave de Rust Atoll**: sin Alloy/Copper (aún no hay Workshop): nivel 5 + Power Hammer + Scrap Yard.
+- **Unidades**: el mundo está en *studs* (1 stud = 0.28 m). Alcance 11 studs = 3 m, caminar 16 studs/s = 4.5 m/s, spawn a Scrap Yard 195 studs = 55 m. `Formulas.studs_a_metros` hace la conversión.
+- **Salto**: 1 m de alto y 0.9 s en el aire (gravedad propia del jugador).
+- **Anillo del coloso**: radio 11 a 34 alrededor del coloso, para castigar a quien pelea pegado a las placas.
+- **Muerte**: reaparece en la consola del coloso a los 45 s (valor del Rol 3) y el coloso se reinicia.
+- **Maestría**: solo después de vencer a los 3. El tiempo se cuenta desde que empieza el combate (sin la intro de 3 s).
 - **Sonidos**: generados por código como marcadores; hay que reemplazarlos por audio real.

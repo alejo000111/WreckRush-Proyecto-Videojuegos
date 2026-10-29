@@ -7,12 +7,18 @@ signal viaje_pedido(destino: String)
 
 const SEPARACION := 240.0
 const PUNTO_PLAZA := Vector3(0, 3, 55)
-const PUNTO_SCRAP_YARD := Vector3(0, 3, -150)
-const PUNTO_DOWNTOWN := Vector3(160, 3, -240)
 const RADIO_PORTAL := 4.0
 const ESPERA_PORTAL := 1.5
+const RADIO_RESERVA_COLOSO := 46.0
 
-var puerta_downtown: StaticBody3D
+const PUNTOS_ENTRADA := {
+	"scrap_yard": Vector3(0, 3, -150),
+	"downtown": Vector3(160, 3, -240),
+	"industrial": Vector3(160, 3, 0),
+}
+
+var puertas: Dictionary = {}
+var colosos: Array[Coloso] = []
 var destructibles: Array[Destructible] = []
 
 var _portales: Array = []
@@ -28,13 +34,15 @@ func _ready() -> void:
 	_construir_plaza()
 	_construir_scrap_yard()
 	_construir_downtown()
+	_construir_industrial()
 	_construir_bloques_bloqueados()
 	_construir_horizonte()
 	if Engine.is_editor_hint():
 		return
 	GameState.zona_desbloqueada.connect(_al_desbloquear)
-	if GameState.zona_abierta("downtown"):
-		_abrir_puerta(false)
+	for id in puertas:
+		if GameState.zona_abierta(id):
+			_abrir_puerta(id, false)
 
 
 func _process(delta: float) -> void:
@@ -52,6 +60,13 @@ func _process(delta: float) -> void:
 			_espera = ESPERA_PORTAL
 			viaje_pedido.emit(portal["destino"])
 			return
+
+
+func coloso_de(zona: String) -> Coloso:
+	for c in colosos:
+		if GameConfig.COLOSOS[c.numero - 1]["zona"] == zona:
+			return c
+	return null
 
 
 func _construir_suelos() -> void:
@@ -72,8 +87,8 @@ func _construir_suelos() -> void:
 	calles.position = Vector3(0, 0.01, 0)
 	add_child(calles)
 	_suelo_zona(Vector2(0, 0), Color("#2B2F36"), 1.0)
-	_suelo_zona(GameConfig.ZONAS["scrap_yard"]["centro"], GameConfig.ZONAS["scrap_yard"]["suelo"], 0.0)
-	_suelo_zona(GameConfig.ZONAS["downtown"]["centro"], GameConfig.ZONAS["downtown"]["suelo"], 0.0)
+	for id in GameConfig.ORDEN_ZONAS:
+		_suelo_zona(GameConfig.ZONAS[id]["centro"], GameConfig.ZONAS[id]["suelo"], 0.0)
 
 
 func _suelo_zona(centro: Vector2, color: Color, puntos: float) -> void:
@@ -104,7 +119,6 @@ func _construir_plaza() -> void:
 	var gris := Formas.material(Color("#3A3F48"), 0.7, 0.5)
 	Formas.caja_solida(raiz, Vector3(16, 5, 16), Vector3(0, 2.5, 0), Color("#3A3F48"))
 	var fuste := StaticBody3D.new()
-	fuste.position = Vector3(0, 0, 0)
 	var forma_fuste := CollisionShape3D.new()
 	var cilindro := CylinderShape3D.new()
 	cilindro.radius = 4.5
@@ -126,16 +140,13 @@ func _construir_plaza() -> void:
 		Formas.malla(raiz, "prism", Vector3(5.0, 4.0, 0.15), Vector3(0, 0.2, 30.0 - i * 9.0), flecha, false).rotation.x = -PI * 0.5
 	for i in 12:
 		var ang := i * TAU / 12.0
-		var x := cos(ang) * 92.0
-		var z := sin(ang) * 92.0
-		_farola(raiz, Vector3(x, 0, z))
+		_farola(raiz, Vector3(cos(ang) * 92.0, 0, sin(ang) * 92.0))
 	_estacion(raiz, "UPGRADE STATION", Vector3(74, 0, -20), GameColors.AMARILLO, "upgrades", "Open · Upgrade Station", -1)
-	_estacion(raiz, "TOOL RACK", Vector3(74, 0, -68), GameColors.NARANJA, "tools", "Open · Tool Rack", -1)
 	_estacion(raiz, "SETTINGS TERMINAL", Vector3(-74, 0, -20), GameColors.CIAN, "settings", "Open · Settings", 1)
-	_puerta_islas(raiz, Vector3(-46, 0, -72))
-	_portal(raiz, "SCRAP YARD", Vector3(61, 0, 30), "scrap_yard")
-	_portal(raiz, "DOWNTOWN", Vector3(52, 0, 54), "downtown")
-	_guia_distrito(raiz, "SCRAP YARD  >>", Vector3(0, 6, -108), 0.0)
+	_portal(raiz, "ISLAND 1 · SCRAP YARD", Vector3(61, 0, 30), "scrap_yard")
+	_portal(raiz, "ISLAND 2 · DOWNTOWN", Vector3(52, 0, 54), "downtown")
+	_portal(raiz, "ISLAND 3 · INDUSTRIAL", Vector3(35, 0, 72), "industrial")
+	Formas.etiqueta(raiz, "SCRAP YARD  >>", Vector3(0, 6, -108), 0.07, GameColors.AMARILLO, 0.0, true)
 
 
 func _farola(padre: Node3D, posicion: Vector3) -> void:
@@ -161,36 +172,16 @@ func _estacion(padre: Node3D, nombre: String, posicion: Vector3, color: Color, p
 	inter.activado.connect(func() -> void: panel_pedido.emit(panel))
 
 
-func _puerta_islas(padre: Node3D, posicion: Vector3) -> void:
-	var raiz := Node3D.new()
-	raiz.position = posicion
-	padre.add_child(raiz)
-	for lado in [-1, 1]:
-		Formas.caja_solida(raiz, Vector3(3, 20, 3), Vector3(lado * 9, 10, 0), Color("#3A3F48"))
-		Formas.malla(raiz, "box", Vector3(0.6, 16, 0.6), Vector3(lado * 9, 10, 1.8), Formas.material(GameColors.ROJO, 0.4, 0.0, 2.2), false)
-	Formas.malla(raiz, "box", Vector3(22, 3, 3.4), Vector3(0, 19.5, 0), Formas.material(Color("#4A4F59"), 0.5, 0.6))
-	Formas.etiqueta(raiz, "BOSS ISLANDS", Vector3(0, 19.6, 1.8), 0.05, GameColors.ROJO)
-	for i in 3:
-		Formas.malla(raiz, "sph", Vector3(2.4, 2.4, 2.4), Vector3(-6 + i * 6, 8.0, 0), Formas.material(GameColors.ROJO, 0.2, 0.0, 2.4), false)
-	Formas.luz_puntual(raiz, Vector3(0, 8, 3), GameColors.ROJO, 1.4, 26.0)
-	var inter := Interactable.crear(raiz, Vector3(0, 1.5, 6), "Open · Island Gate", 9.0)
-	inter.activado.connect(func() -> void: panel_pedido.emit("islands"))
-
-
 func _portal(padre: Node3D, nombre: String, posicion: Vector3, destino: String) -> void:
 	var raiz := Node3D.new()
 	raiz.position = posicion
 	padre.add_child(raiz)
-	var color := GameColors.AMARILLO if destino == "scrap_yard" else Color("#E8A0B8")
+	var color: Color = GameConfig.ZONAS[destino]["tinte"]
 	Formas.malla(raiz, "cyl", Vector3(8, 0.5, 8), Vector3(0, 0.3, 0), Formas.material(GameColors.GRIS_OSCURO, 0.4, 0.7))
 	Formas.malla(raiz, "cyl", Vector3(6.4, 0.2, 6.4), Vector3(0, 0.6, 0), Formas.material(color, 0.3, 0.0, 2.2), false)
-	Formas.etiqueta(raiz, nombre, Vector3(0, 5.5, 0), 0.05, color, 0.0, true)
+	Formas.etiqueta(raiz, nombre, Vector3(0, 5.5, 0), 0.04, color, 0.0, true)
 	Formas.luz_puntual(raiz, Vector3(0, 2.0, 0), color, 0.8, 14.0)
 	_portales.append({"pos": posicion, "destino": destino})
-
-
-func _guia_distrito(padre: Node3D, texto: String, posicion: Vector3, giro: float) -> void:
-	Formas.etiqueta(padre, texto, posicion, 0.07, GameColors.AMARILLO, giro, true)
 
 
 func _construir_scrap_yard() -> void:
@@ -205,10 +196,8 @@ func _construir_scrap_yard() -> void:
 	Formas.malla(raiz, "box", Vector3(74, 3.4, 3.4), Vector3(centro.x, 44, centro.y - 78), amarillo_grua)
 	Formas.malla(raiz, "box", Vector3(0.5, 16, 0.5), Vector3(centro.x - 10, 35, centro.y - 78), metal)
 	Formas.malla(raiz, "box", Vector3(3, 3, 3), Vector3(centro.x - 10, 26, centro.y - 78), Formas.material(GameColors.ROJO, 0.5, 0.2))
-	var montes := [Vector3(-80, 0, -80), Vector3(78, 0, -86), Vector3(-76, 0, 70)]
-	for monte in montes:
+	for monte in [Vector3(-80, 0, -80), Vector3(78, 0, -86), Vector3(-76, 0, 70)]:
 		var m := Formas.malla(raiz, "cone", Vector3(40, 18, 40), Vector3(centro.x + monte.x, 9, centro.y + monte.z), Formas.material(Color("#3E3A36"), 0.95, 0.2))
-		m.scale = Vector3(1.0, 1.0, 1.0)
 		var cuerpo := StaticBody3D.new()
 		cuerpo.position = m.position + Vector3(0, -3, 0)
 		var forma := CollisionShape3D.new()
@@ -220,17 +209,58 @@ func _construir_scrap_yard() -> void:
 		raiz.add_child(cuerpo)
 	for punto in [Vector3(-90, 0, 90), Vector3(90, 0, 90), Vector3(-90, 0, -90), Vector3(90, 0, -90)]:
 		_reflector(raiz, Vector3(centro.x + punto.x, 0, centro.y + punto.z))
-	_retorno(raiz, Vector3(-60, 0, centro.y + 90), "scrap_yard")
-	Formas.etiqueta(raiz, "SCRAP YARD", Vector3(0, 9, centro.y + 98), 0.08, GameColors.AMARILLO, 0.0, true)
-	var exclusiones: Array = [Rect2(-14, centro.y + 60, 28, 90), Rect2(-80, centro.y + 70, 40, 36)]
-	_poblar("scrap_yard", centro, raiz, exclusiones)
+	_retorno(raiz, Vector3(-60, 0, centro.y + 90))
+	Formas.etiqueta(raiz, "ISLAND 1 · SCRAP YARD", Vector3(0, 9, centro.y + 98), 0.06, GameColors.AMARILLO, 0.0, true)
+	var exclusiones: Array = [Rect2(-14, centro.y + 60, 28, 90), Rect2(-80, centro.y + 70, 40, 36), Rect2(centro.x - 40, centro.y - 84, 80, 12)]
+	_poblar("scrap_yard", raiz, exclusiones, [Vector2(-80, -80), Vector2(78, -86), Vector2(-76, 70)])
 
 
 func _construir_downtown() -> void:
-	var raiz := Node3D.new()
-	raiz.name = "Downtown"
-	add_child(raiz)
+	var raiz := _zona_con_muros("downtown", "Downtown")
 	var centro: Vector2 = GameConfig.ZONAS["downtown"]["centro"]
+	for f in [Vector3(-60, 0, -88), Vector3(-20, 0, -90), Vector3(20, 0, -88), Vector3(62, 0, -90)]:
+		var alto := _rng.randf_range(30.0, 46.0)
+		var torre := Formas.caja_solida(raiz, Vector3(24, alto, 10), Vector3(centro.x + f.x, alto * 0.5, centro.y + f.z), Color("#3E4656"))
+		Formas.malla(torre, "box", Vector3(20, alto * 0.8, 0.4), Vector3(0, 0, 5.1), Formas.material(Color("#9FC4D8"), 0.2, 0.0, 0.9), false)
+	for p in [Vector3(-45, 0, 20), Vector3(-45, 0, -40), Vector3(0, 0, 60), Vector3(0, 0, -50)]:
+		_farola(raiz, Vector3(centro.x + p.x, 0, centro.y + p.z))
+	_retorno(raiz, Vector3(centro.x + 70, 0, centro.y + 80))
+	var exclusiones: Array = [Rect2(centro.x - 100, centro.y - 22, 50, 44), Rect2(centro.x + 50, centro.y + 60, 40, 40)]
+	_poblar("downtown", raiz, exclusiones, [])
+
+
+func _construir_industrial() -> void:
+	var raiz := _zona_con_muros("industrial", "Industrial")
+	var centro: Vector2 = GameConfig.ZONAS["industrial"]["centro"]
+	var acero := Formas.material(Color("#6A7078"), 0.5, 0.7)
+	for x in [-60.0, -40.0]:
+		Formas.caja_solida(raiz, Vector3(7, 46, 7), Vector3(centro.x + x, 23, centro.y - 85), Color("#6A7078"))
+		Formas.malla(raiz, "box", Vector3(7.6, 2.4, 7.6), Vector3(centro.x + x, 46.8, centro.y - 85), Formas.material(GameColors.ROJO, 0.6, 0.2))
+	var tanque := StaticBody3D.new()
+	tanque.position = Vector3(centro.x - 70, 11, centro.y + 55)
+	var forma := CollisionShape3D.new()
+	var cil := CylinderShape3D.new()
+	cil.radius = 12.0
+	cil.height = 22.0
+	forma.shape = cil
+	tanque.add_child(forma)
+	raiz.add_child(tanque)
+	Formas.malla(tanque, "cyl", Vector3(24, 22, 24), Vector3.ZERO, acero)
+	Formas.malla(tanque, "sph", Vector3(24, 24, 24), Vector3(0, 11, 0), acero)
+	for x in [-10.0, 20.0, 50.0]:
+		Formas.malla(raiz, "cyl", Vector3(2.4, 90, 2.4), Vector3(centro.x + x, 8, centro.y - 95), acero).rotation.z = PI * 0.5
+	for p in [Vector3(-45, 0, 20), Vector3(-45, 0, -40), Vector3(0, 0, 60)]:
+		_farola(raiz, Vector3(centro.x + p.x, 0, centro.y + p.z))
+	_retorno(raiz, Vector3(centro.x + 70, 0, centro.y + 80))
+	var exclusiones: Array = [Rect2(centro.x - 100, centro.y - 22, 50, 44), Rect2(centro.x + 50, centro.y + 60, 40, 40), Rect2(centro.x - 84, centro.y + 41, 28, 28)]
+	_poblar("industrial", raiz, exclusiones, [Vector2(-60, -85), Vector2(-40, -85)])
+
+
+func _zona_con_muros(id: String, nombre: String) -> Node3D:
+	var raiz := Node3D.new()
+	raiz.name = nombre
+	add_child(raiz)
+	var centro: Vector2 = GameConfig.ZONAS[id]["centro"]
 	var muro := Color("#2F333C")
 	var altura := 16.0
 	Formas.caja_solida(raiz, Vector3(200, altura, 3), Vector3(centro.x, altura * 0.5, centro.y - 100), muro)
@@ -241,27 +271,21 @@ func _construir_downtown() -> void:
 	for lado in [-1, 1]:
 		Formas.caja_solida(raiz, Vector3(5, 26, 5), Vector3(centro.x - 100, 13, centro.y + lado * 26), Color("#4A4F59"))
 	Formas.malla(raiz, "box", Vector3(5, 5, 56), Vector3(centro.x - 100, 27, centro.y), Formas.material(Color("#4A4F59"), 0.5, 0.6))
-	Formas.etiqueta(raiz, "DOWNTOWN", Vector3(centro.x - 102.8, 27, centro.y), 0.07, Color("#E8A0B8"), -PI * 0.5)
-	puerta_downtown = Formas.caja_solida(raiz, Vector3(3, 24, 48), Vector3(centro.x - 100, 12, centro.y), Color("#6B7078"))
-	Formas.malla(puerta_downtown, "box", Vector3(0.4, 22, 4), Vector3(-1.8, 0, 0), Formas.material(GameColors.ROJO, 0.4, 0.0, 1.4), false)
+	var color: Color = GameConfig.ZONAS[id]["tinte"]
+	var titulo := "ISLAND %d · %s" % [int(GameConfig.ZONAS[id]["isla"]), GameConfig.ZONAS[id]["nombre"]]
+	Formas.etiqueta(raiz, titulo, Vector3(centro.x - 102.8, 27, centro.y), 0.05, color, -PI * 0.5)
+	var puerta := Formas.caja_solida(raiz, Vector3(3, 24, 48), Vector3(centro.x - 100, 12, centro.y), Color("#6B7078"))
+	Formas.malla(puerta, "box", Vector3(0.4, 22, 4), Vector3(-1.8, 0, 0), Formas.material(GameColors.ROJO, 0.4, 0.0, 1.4), false)
+	puertas[id] = puerta
 	var inter := Interactable.crear(raiz, Vector3(centro.x - 106, 1.5, centro.y), "", 14.0)
 	inter.texto_dinamico = func() -> String:
-		if GameState.zona_abierta("downtown"):
-			return "DOWNTOWN OPEN"
-		return "Unlock DOWNTOWN · $%s" % Formulas.abreviar(GameConfig.ZONAS["downtown"]["costo"])
+		if GameState.zona_abierta(id):
+			return "%s OPEN" % GameConfig.ZONAS[id]["nombre"]
+		return "Unlock ISLAND %d · %s Scrap" % [int(GameConfig.ZONAS[id]["isla"]), Formulas.abreviar(GameConfig.ZONAS[id]["costo"])]
 	inter.activado.connect(func() -> void:
-		if not GameState.zona_abierta("downtown"):
-			panel_pedido.emit("unlock_downtown"))
-	var fachadas := [Vector3(-60, 0, -88), Vector3(-20, 0, -90), Vector3(20, 0, -88), Vector3(62, 0, -90)]
-	for f in fachadas:
-		var alto := _rng.randf_range(30.0, 46.0)
-		var torre := Formas.caja_solida(raiz, Vector3(24, alto, 10), Vector3(centro.x + f.x, alto * 0.5, centro.y + f.z), Color("#3E4656"))
-		Formas.malla(torre, "box", Vector3(20, alto * 0.8, 0.4), Vector3(0, 0, 5.1), Formas.material(Color("#9FC4D8"), 0.2, 0.0, 0.9), false)
-	for p in [Vector3(-45, 0, 20), Vector3(45, 0, 20), Vector3(-45, 0, -40), Vector3(45, 0, -40)]:
-		_farola(raiz, Vector3(centro.x + p.x, 0, centro.y + p.z))
-	_retorno(raiz, Vector3(centro.x + 70, 0, centro.y + 80), "downtown")
-	var exclusiones: Array = [Rect2(centro.x - 100, centro.y - 22, 50, 44), Rect2(centro.x + 50, centro.y + 60, 40, 40)]
-	_poblar("downtown", centro, raiz, exclusiones)
+		if not GameState.zona_abierta(id):
+			panel_pedido.emit("unlock_" + id))
+	return raiz
 
 
 func _reflector(padre: Node3D, posicion: Vector3) -> void:
@@ -270,53 +294,56 @@ func _reflector(padre: Node3D, posicion: Vector3) -> void:
 	padre.add_child(r)
 	Formas.malla(r, "cyl", Vector3(0.7, 18, 0.7), Vector3(0, 9, 0), Formas.material(Color("#2A2D33"), 0.5, 0.6))
 	Formas.malla(r, "box", Vector3(3, 1.6, 1), Vector3(0, 18.5, 0), Formas.material(Color("#FFE2B0"), 0.3, 0.0, 3.0), false)
-	Formas.luz_puntual(r, Vector3(0, 17, 0), Color("#FFC890"), 1.1, 55.0)
+	Formas.luz_puntual(r, Vector3(0, 17, 0), Color("#FFC890"), 0.7, 45.0)
 
 
-func _retorno(padre: Node3D, posicion: Vector3, zona: String) -> void:
-	var global_pos := Vector3(posicion.x, 0, posicion.z)
+func _retorno(padre: Node3D, posicion: Vector3) -> void:
 	var raiz := Node3D.new()
-	raiz.position = global_pos
+	raiz.position = posicion
 	padre.add_child(raiz)
 	Formas.malla(raiz, "cyl", Vector3(7, 0.5, 7), Vector3(0, 0.3, 0), Formas.material(GameColors.GRIS_OSCURO, 0.4, 0.7))
 	Formas.malla(raiz, "cyl", Vector3(5.6, 0.2, 5.6), Vector3(0, 0.6, 0), Formas.material(GameColors.NARANJA, 0.3, 0.0, 2.2), false)
 	Formas.etiqueta(raiz, "RETURN TO PLAZA", Vector3(0, 4.5, 0), 0.04, GameColors.NARANJA, 0.0, true)
-	_portales.append({"pos": global_pos, "destino": "plaza"})
+	_portales.append({"pos": posicion, "destino": "plaza"})
 
 
-func _poblar(zona: String, centro: Vector2, padre: Node3D, exclusiones: Array) -> void:
+func _poblar(zona: String, padre: Node3D, exclusiones: Array, montes: Array) -> void:
+	var centro: Vector2 = GameConfig.ZONAS[zona]["centro"]
+	var numero: int = GameConfig.ZONAS[zona]["isla"]
+	var coloso := Coloso.crear(numero)
+	coloso.position = Vector3(centro.x + GameConfig.POSICION_COLOSO.x, 0, centro.y + GameConfig.POSICION_COLOSO.y)
+	padre.add_child(coloso)
+	colosos.append(coloso)
+	var centro_coloso := centro + GameConfig.POSICION_COLOSO
 	var colocados: Array = []
 	var margen := 18.0
 	for def in GameConfig.OBJETOS[zona]:
 		var radio_def: float = maxf(def["caja"].x, def["caja"].z) * 0.5
 		for n in int(def["cantidad"]):
-			for intento in 300:
+			for intento in 400:
 				var x := _rng.randf_range(-100.0 + margen + radio_def, 100.0 - margen - radio_def)
 				var z := _rng.randf_range(-100.0 + margen + radio_def, 100.0 - margen - radio_def)
-				var global_p := Vector2(centro.x + x, centro.y + z)
-				if _choca(global_p, radio_def, colocados, exclusiones, zona, centro):
+				var punto := Vector2(centro.x + x, centro.y + z)
+				if _choca(punto, radio_def, colocados, exclusiones, centro, montes, centro_coloso):
 					continue
 				var objeto := Destructible.crear(def, zona)
-				objeto.position = Vector3(global_p.x, 0, global_p.y)
+				objeto.position = Vector3(punto.x, 0, punto.y)
 				objeto.rotation.y = _rng.randf_range(0.0, TAU)
 				padre.add_child(objeto)
 				destructibles.append(objeto)
-				colocados.append({"pos": global_p, "radio": radio_def})
+				colocados.append({"pos": punto, "radio": radio_def})
 				break
 
 
-func _choca(punto: Vector2, radio: float, colocados: Array, exclusiones: Array, zona: String, centro: Vector2) -> bool:
+func _choca(punto: Vector2, radio: float, colocados: Array, exclusiones: Array, centro: Vector2, montes: Array, centro_coloso: Vector2) -> bool:
 	for caja in exclusiones:
-		var area := Rect2(caja).grow(radio)
-		if area.has_point(punto):
+		if Rect2(caja).grow(radio).has_point(punto):
 			return true
-	if zona == "scrap_yard":
-		var grua := Rect2(centro.x - 40, centro.y - 84, 80, 12).grow(radio)
-		if grua.has_point(punto):
+	for monte in montes:
+		if punto.distance_to(centro + monte) < 22.0 + radio:
 			return true
-		for monte in [Vector2(-80, -80), Vector2(78, -86), Vector2(-76, 70)]:
-			if punto.distance_to(centro + monte) < 22.0 + radio:
-				return true
+	if punto.distance_to(centro_coloso) < RADIO_RESERVA_COLOSO + radio:
+		return true
 	for otro in colocados:
 		if punto.distance_to(otro["pos"]) < radio + float(otro["radio"]) + 5.0:
 			return true
@@ -325,12 +352,11 @@ func _choca(punto: Vector2, radio: float, colocados: Array, exclusiones: Array, 
 
 func _construir_bloques_bloqueados() -> void:
 	var bloqueos := [
-		{"nombre": "VIP YARD", "celda": Vector2(-1, -1), "sub": "VIP PASS · COMING SOON"},
-		{"nombre": "INDUSTRIAL", "celda": Vector2(1, 0), "sub": "75K · COMING SOON"},
-		{"nombre": "CHAOS CORE", "celda": Vector2(-1, 0), "sub": "10B · COMING SOON"},
-		{"nombre": "FUTURE DISTRICT", "celda": Vector2(-1, 1), "sub": "150M · COMING SOON"},
+		{"nombre": "VIP YARD", "celda": Vector2(-1, -1), "sub": "COMING SOON"},
+		{"nombre": "CHAOS CORE", "celda": Vector2(-1, 0), "sub": "COMING SOON"},
+		{"nombre": "FUTURE DISTRICT", "celda": Vector2(-1, 1), "sub": "COMING SOON"},
 		{"nombre": "HALL OF WRECKERS", "celda": Vector2(0, 1), "sub": "COMING SOON"},
-		{"nombre": "MILITARY BASE", "celda": Vector2(1, 1), "sub": "2.5M · COMING SOON"},
+		{"nombre": "MILITARY BASE", "celda": Vector2(1, 1), "sub": "COMING SOON"},
 	]
 	for b in bloqueos:
 		var celda: Vector2 = b["celda"]
@@ -338,9 +364,6 @@ func _construir_bloques_bloqueados() -> void:
 		var bloque := Formas.caja_solida(self, Vector3(200, 14, 200), pos + Vector3(0, 7, 0), Color("#262930"))
 		bloque.name = String(b["nombre"]).to_pascal_case()
 		Formas.malla(bloque, "box", Vector3(204, 1, 204), Vector3(0, 7.2, 0), Formas.material(Color("#33363E"), 0.5, 0.5), false)
-		var rojo := Formas.material(GameColors.ROJO, 0.4, 0.0, 1.4)
-		for i in 10:
-			Formas.malla(bloque, "box", Vector3(10, 14.3, 0.4), Vector3(-90 + i * 20, 0, 100.1), rojo, false).rotation.z = 0.0
 		Formas.etiqueta(bloque, b["nombre"], Vector3(0, 12.0, 0), 0.22, GameColors.BLANCO, 0.0, true)
 		Formas.etiqueta(bloque, b["sub"], Vector3(0, 3.0, 0), 0.12, GameColors.ROJO, 0.0, true)
 
@@ -364,19 +387,19 @@ func _construir_horizonte() -> void:
 
 
 func _al_desbloquear(id: String) -> void:
-	if id == "downtown":
-		_abrir_puerta(true)
+	_abrir_puerta(id, true)
 
 
-func _abrir_puerta(animado: bool) -> void:
-	if puerta_downtown == null:
+func _abrir_puerta(id: String, animado: bool) -> void:
+	if not puertas.has(id):
 		return
-	var colision := puerta_downtown.get_child(0) as CollisionShape3D
+	var puerta: StaticBody3D = puertas[id]
+	var colision := puerta.get_child(0) as CollisionShape3D
 	colision.set_deferred("disabled", true)
-	var destino_y := puerta_downtown.position.y + 26.0
+	var destino_y := puerta.position.y + 26.0
 	if animado:
 		var t := create_tween()
-		t.tween_property(puerta_downtown, "position:y", destino_y, 1.2).set_trans(Tween.TRANS_QUAD)
+		t.tween_property(puerta, "position:y", destino_y, 1.2).set_trans(Tween.TRANS_QUAD)
 		Sfx.reproducir("comprar")
 	else:
-		puerta_downtown.position.y = destino_y
+		puerta.position.y = destino_y

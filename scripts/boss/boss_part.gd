@@ -12,7 +12,6 @@ var caja: Vector3 = Vector3(2, 2, 2)
 var color_principal: Color = Color("#6B7078")
 var vulnerable: bool = false
 var roto: bool = false
-var fraccion_tope: float = GameConfig.JEFE["fraccion_tope_golpe"]
 
 var _visual: MeshInstance3D
 var _material: StandardMaterial3D
@@ -85,7 +84,7 @@ func reiniciar(curar: bool = true) -> void:
 func recibir_golpe(dano: float, critico: bool = false) -> bool:
 	if not puede_ser_golpeado():
 		return false
-	var aplicado := minf(dano, vida_max * fraccion_tope)
+	var aplicado := dano
 	vida = maxf(vida - aplicado, 0.0)
 	_destello()
 	Fx.golpe(self, aplicado, critico)

@@ -43,7 +43,7 @@ func _paso_cumplido(paso: int) -> bool:
 		1:
 			return GameState.objetos_rotos >= 1
 		2:
-			return GameState.cash >= 25 or GameState.nivel_mejora("damage") >= 1
+			return GameState.scrap >= GameState.precio_mejora("damage") or GameState.nivel_mejora("damage") >= 1
 		3:
 			return GameState.nivel_mejora("damage") >= 1
 		4:
@@ -58,7 +58,7 @@ func objetivo_para(paso: int) -> Variant:
 		1, 2, 4:
 			var distrito := AmbienceController.distrito_en(jugador.global_position)
 			if distrito != "scrap_yard":
-				return CityWorld.PUNTO_SCRAP_YARD
+				return CityWorld.PUNTOS_ENTRADA["scrap_yard"]
 			return _destructible_cercano()
 		3:
 			return Vector3(74, 0, -20)

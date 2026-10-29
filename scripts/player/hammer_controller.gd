@@ -7,25 +7,17 @@ var _cooldown: float = 0.0
 var _sostenido: bool = false
 
 
-static func seleccionar(candidatos: Array, maximo: int = GameConfig.MAX_OBJETIVOS_POR_GOLPE) -> Array:
+static func seleccionar(candidatos: Array, maximo: int = 1) -> Array:
 	var ordenados := candidatos.duplicate()
 	ordenados.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["distancia"] < b["distancia"])
 	return ordenados.slice(0, maximo)
 
 
-static func tirar_dano(base: float, probabilidad: float, azar: float) -> Dictionary:
-	var critico := azar < probabilidad
-	return {"dano": base * (GameConfig.MULTIPLICADOR_CRITICO if critico else 1.0), "critico": critico}
-
-
 func _unhandled_input(evento: InputEvent) -> void:
 	if evento.is_action("attack"):
 		_sostenido = evento.is_pressed()
-	for i in GameConfig.ORDEN_HERRAMIENTAS.size():
-		if evento.is_action_pressed("tool_%d" % (i + 1)):
-			GameState.equipar(GameConfig.ORDEN_HERRAMIENTAS[i])
-			if GameState.tutorial_paso == 0 and not GameState.tutorial_completo:
-				GameState.avanzar_tutorial()
+	if evento.is_action_pressed("tool_1") and GameState.tutorial_paso == 0 and not GameState.tutorial_completo:
+		GameState.avanzar_tutorial()
 
 
 func _process(delta: float) -> void:
@@ -57,6 +49,6 @@ func _golpear() -> void:
 	_cooldown = GameState.cooldown_ataque()
 	jugador.animar_golpe(objetivos[0]["nodo"].global_position)
 	for entrada in objetivos:
-		var tirada := tirar_dano(GameState.dano_base_golpe(), GameState.probabilidad_critico(), randf())
-		GameState.registrar_golpe(tirada["dano"])
-		entrada["nodo"].recibir_golpe(tirada["dano"], tirada["critico"])
+		var dano := GameState.dano_base_golpe()
+		GameState.registrar_golpe(dano)
+		entrada["nodo"].recibir_golpe(dano, false)

@@ -56,7 +56,7 @@ func romper(objeto: Node3D, tipo: String, pago: int = 0) -> void:
 		_mundo().add_child(pieza)
 		pieza.global_position = base + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
 	if pago > 0:
-		numero_flotante(base + Vector3(0, 3, 0), "+$%s" % Formulas.abreviar(pago), GameColors.AMARILLO, 1.4 + float(perfil["tamano"]) * 0.2)
+		numero_flotante(base + Vector3(0, 3, 0), "+%s" % Formulas.abreviar(pago), GameColors.AMARILLO, 1.4 + float(perfil["tamano"]) * 0.2)
 	if float(perfil["sacudida"]) > 0.0:
 		sacudida_camara.emit(float(perfil["sacudida"]))
 	Sfx.reproducir("romper", -2.0 + float(perfil["tamano"]) * 0.5, 1.3 - float(perfil["tamano"]) * 0.15)

@@ -24,7 +24,7 @@ func construir() -> void:
 		fila.add_child(boton)
 		contenido.add_child(fila)
 	contenido.add_child(UIKit.separador(10))
-	contenido.add_child(UIKit.etiqueta("MOVE WASD · JUMP SPACE · WRECK LEFT CLICK / F · TOOL 1-2 · INTERACT E · LOOK RIGHT MOUSE DRAG", 14, Color("#8A909C")))
+	contenido.add_child(UIKit.etiqueta("MOVE WASD · JUMP SPACE · WRECK LEFT CLICK / F · INTERACT E · LOOK RIGHT MOUSE DRAG", 14, Color("#8A909C")))
 	_boton_reinicio = UIKit.boton("RESET PROGRESS", GameColors.ROJO, Vector2(260, 44), 18)
 	_boton_reinicio.pressed.connect(_reiniciar)
 	contenido.add_child(_boton_reinicio)

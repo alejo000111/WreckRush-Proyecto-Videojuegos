@@ -9,12 +9,18 @@ func _unhandled_input(evento: InputEvent) -> void:
 		return
 	match evento.physical_keycode:
 		KEY_F1:
-			GameState.agregar_cash(100000)
-			GameState.toast.emit("DEV: +100K CASH", "good")
+			GameState.agregar_scrap(10000)
+			GameState.toast.emit("DEV: +10K SCRAP", "good")
 		KEY_F2:
-			GameState.agregar_xp(GameState.xp_requerido())
+			for id in GameConfig.ORDEN_MEJORAS:
+				GameState.mejoras[id] = int(GameConfig.MEJORAS[id]["max"])
+			GameState.mejora_comprada.emit("damage", GameState.mejoras["damage"])
 		KEY_F3:
-			GameState.agregar_scrap(100000)
+			for id in GameConfig.ORDEN_ZONAS:
+				if not GameState.zona_abierta(id):
+					GameState.zonas.append(id)
+					GameState.zona_desbloqueada.emit(id)
 		KEY_F4:
-			if main != null:
-				main.viajar_a_isla()
+			for zona in GameConfig.ORDEN_ZONAS:
+				GameState.rotos_por_zona[zona] = GameConfig.total_objetos(zona)
+			GameState.objeto_roto.emit({}, "scrap_yard")
