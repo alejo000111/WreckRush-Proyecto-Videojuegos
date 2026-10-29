@@ -1,3 +1,4 @@
+@tool
 class_name CityWorld
 extends Node3D
 
@@ -29,12 +30,16 @@ func _ready() -> void:
 	_construir_downtown()
 	_construir_bloques_bloqueados()
 	_construir_horizonte()
+	if Engine.is_editor_hint():
+		return
 	GameState.zona_desbloqueada.connect(_al_desbloquear)
 	if GameState.zona_abierta("downtown"):
 		_abrir_puerta(false)
 
 
 func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
 	_espera = maxf(_espera - delta, 0.0)
 	if _jugador == null or not is_instance_valid(_jugador):
 		_jugador = get_tree().get_first_node_in_group("player") as Node3D
@@ -139,7 +144,7 @@ func _farola(padre: Node3D, posicion: Vector3) -> void:
 	padre.add_child(farola)
 	Formas.malla(farola, "cyl", Vector3(0.6, 12, 0.6), Vector3(0, 6, 0), Formas.material(Color("#2A2D33"), 0.5, 0.6))
 	Formas.malla(farola, "sph", Vector3(1.8, 1.8, 1.8), Vector3(0, 12.4, 0), Formas.material(Color("#FFD9A0"), 0.3, 0.0, 3.0), false)
-	Formas.luz_puntual(farola, Vector3(0, 11.5, 0), Color("#FFB070"), 0.9, 36.0)
+	Formas.luz_puntual(farola, Vector3(0, 11.5, 0), Color("#FFB070"), 0.6, 30.0)
 
 
 func _estacion(padre: Node3D, nombre: String, posicion: Vector3, color: Color, panel: String, indicacion: String, hacia_x: int) -> void:

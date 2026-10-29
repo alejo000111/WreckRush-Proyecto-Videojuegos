@@ -1,6 +1,6 @@
 # WRECKRUSH — v1.0 (port a Godot)
 
-**DESTROY. GET RICH. REBIRTH.** Simulador de destrucción 3D. Port a **Godot 4.3 (GDScript)** del juego de Roblox del equipo OpenGames, construido a partir de los talleres (Rol 1, 2, 3 y Entrega Final) y la *Guía completa* (estado al 13-oct-2026).
+**DESTROY. GET RICH. REBIRTH.** Simulador de destrucción 3D. Port a **Godot 4.7 (GDScript)** del juego de Roblox del equipo OpenGames, construido a partir de los talleres (Rol 1, 2, 3 y Entrega Final) y la *Guía completa* (estado al 13-oct-2026).
 
 ## Qué incluye la v1.0 (alcance del Corte 1)
 
@@ -16,7 +16,7 @@ Fuera de alcance (siguientes cortes): Rebirth, Workshop/materiales, mascotas, ti
 
 ## Cómo ejecutarlo
 
-1. Instala [Godot 4.3](https://godotengine.org/download) (estándar, no .NET).
+1. Instala [Godot 4.7](https://godotengine.org/download) (estándar, no .NET). Si abres el proyecto con otra versión de 4.x, Godot avisa; es normal.
 2. Abre la carpeta con Godot (la primera vez importa los recursos) y pulsa **F5**.
 
 Por consola:

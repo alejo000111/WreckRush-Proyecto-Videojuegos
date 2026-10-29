@@ -1,3 +1,4 @@
+@tool
 class_name ScrapColossus
 extends Node3D
 
@@ -31,7 +32,8 @@ func _ready() -> void:
 	consola.activado.connect(func() -> void: iniciar_pelea())
 	Formas.caja_solida(self, Vector3(3.0, 3.0, 2.0), Vector3(0, 1.5, 44), GameColors.GRIS_OSCURO)
 	Formas.malla(self, "box", Vector3(3.2, 0.5, 2.2), Vector3(0, 3.2, 44), Formas.material(GameColors.ROJO, 0.5, 0.0, 1.2))
-	_emitir_estado()
+	if not Engine.is_editor_hint():
+		_emitir_estado()
 
 
 func _construir() -> void:
@@ -140,6 +142,8 @@ func actualizar(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
 	actualizar(delta)
 
 

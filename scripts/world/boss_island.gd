@@ -1,3 +1,4 @@
+@tool
 class_name BossIsland
 extends Node3D
 

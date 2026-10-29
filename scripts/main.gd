@@ -1,10 +1,11 @@
 extends Node3D
 
-var jugador: Player
-var camara: CameraController
-var ciudad: CityWorld
-var isla: BossIsland
-var ambiente: AmbienceController
+@onready var ciudad: CityWorld = $Ciudad
+@onready var isla: BossIsland = $RustAtoll
+@onready var ambiente: AmbienceController = $Ambiente
+@onready var jugador: Player = $Jugador
+@onready var camara: CameraController = $Camara
+
 var hud: Hud
 
 var _muerte_restante: float = 0.0
@@ -12,22 +13,6 @@ var _muerte_restante: float = 0.0
 
 func _ready() -> void:
 	InputSetup.registrar()
-	ciudad = CityWorld.new()
-	ciudad.name = "Ciudad"
-	add_child(ciudad)
-	isla = BossIsland.new()
-	isla.name = "RustAtoll"
-	add_child(isla)
-	ambiente = AmbienceController.new()
-	ambiente.name = "Ambiente"
-	add_child(ambiente)
-	jugador = Player.new()
-	jugador.name = "Jugador"
-	jugador.position = CityWorld.PUNTO_PLAZA
-	add_child(jugador)
-	camara = CameraController.new()
-	camara.name = "Camara"
-	add_child(camara)
 	camara.objetivo = jugador
 	camara.yaw = 0.0
 	camara.saltar_a(jugador.global_position)

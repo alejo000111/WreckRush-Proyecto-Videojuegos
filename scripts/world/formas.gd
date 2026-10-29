@@ -1,3 +1,4 @@
+@tool
 class_name Formas
 extends RefCounted
 
